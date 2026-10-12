@@ -13,6 +13,10 @@ int main(int argc, char *argv[]) {
     unsigned int w_usec;
     struct timespec start_time, end_time;
 
+    /*ファイル出力用*/
+    char *filename = NULL;
+    int fd = 1;
+
     int yes = 1;
     setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR,
                &yes, sizeof(yes));
@@ -28,6 +32,19 @@ int main(int argc, char *argv[]) {
     char buf[BUF_LEN];
     int n;
 
+    //ファイルを開く
+    if(argc > 1){
+        filename = argv[1];
+        fd = open(filename, O_CREAT | O_WRONLY, 0644);
+        if(fd < 0) {
+            perror("open");
+            return 1;
+        }
+    }else{
+        printf("Usage: %s [o_filename]\n", argv[0]);
+        return 0;
+    }
+
     //時間計測開始
     clock_gettime(CLOCK_REALTIME, &start_time);
 
@@ -37,9 +54,7 @@ int main(int argc, char *argv[]) {
         printf("Relay connected\n");
 
         while ((n = read(sock, buf, BUF_LEN - 1)) > 0) {
-            buf[n] = '\0';
-
-            printf("Received: %s\n", buf);
+            write(fd, buf, n);
         }
 
         close(sock);
@@ -51,12 +66,12 @@ int main(int argc, char *argv[]) {
     sec = end_time.tv_sec - start_time.tv_sec;
     nsec = end_time.tv_nsec - start_time.tv_nsec;
     time = (double)sec + (double)nsec * 1e-9;
-    printf("Total time : %f\n",time);
 
+    close(fd);
     close(server_sock);
 
 
-    /*ファイルサイズ計測用コード
+    //ファイルサイズ計測用コード
     long fsize;
     FILE *fp = fopen(filename, "rb");
     fseek(fp, 0, SEEK_END);
@@ -66,6 +81,6 @@ int main(int argc, char *argv[]) {
     printf("filesize : %ld / time : %f\n", fsize, time);
     
     fclose(fp);
-    */
+
     return 0;
 }
