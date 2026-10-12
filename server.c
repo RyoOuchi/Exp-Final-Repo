@@ -1,21 +1,29 @@
 #include <stdint.h>
 #include "icslab2_net.h"
 
-void send_to_relay(const char *ip_address, const char *message);
+void send_to_relay(const char *ip_address, const char* file_path);
 
 int main(int argc, char *argv[]) {
     char* message = "Hello, World!";
+    char* file_path = argv[2];
     char* relay_ip = argv[1];
 
-    send_to_relay(relay_ip, message);
+    send_to_relay(relay_ip, file_path);
 
     return 0;
 }
 
-
-void send_to_relay(const char *ip_address, const char *message) {
+void send_to_relay(const char *ip_address, const char* file_path) {
     int sock;
     struct sockaddr_in relayAddr;
+
+    int fd;
+    fd = open(file_path, O_RDONLY);
+
+    if (fd < 0) {
+        perror("open");
+        return;
+    }
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -27,18 +35,13 @@ void send_to_relay(const char *ip_address, const char *message) {
 
     connect(sock, (struct sockaddr *)&relayAddr, sizeof(relayAddr));
 
-    size_t length = strlen(message);
-    size_t sent = 0;
+    char buffer[BUF_LEN];
+    ssize_t n;
 
-    while (sent < length) {
-        ssize_t n = write(sock, message + sent, length - sent);
-        if (n <= 0) {
-            perror("write");
-            break;
-        }
-
-        sent += n;
+    while ((n = read(fd, buffer, sizeof(buffer))) > 0) {
+        write(sock, buffer, n);
     }
 
+    close(fd);
     close(sock);
 }
