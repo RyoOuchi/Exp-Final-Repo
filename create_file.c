@@ -1,4 +1,5 @@
-#include <icslab2_net.h>
+#include "icslab2_net.h"
+#define BUFFER_SIZE 1000
 
 int main(int argc, char *argv[]) {
     // MB
