@@ -6,13 +6,6 @@
 int main(int argc, char *argv[]) {
     int server_sock = socket(AF_INET, SOCK_STREAM, 0);
 
-    /*時間計測用*/
-    unsigned int sec;
-    int nsec;
-    double time;
-    unsigned int w_usec;
-    struct timespec start_time, end_time;
-
     /*ファイル出力用*/
     char *filename = NULL;
     int fd = 1;
@@ -61,26 +54,33 @@ int main(int argc, char *argv[]) {
         printf("Relay disconnected\n");
     }
 
-    //時間計測終了
-    clock_gettime(CLOCK_REALTIME, &end_time);
-    sec = end_time.tv_sec - start_time.tv_sec;
-    nsec = end_time.tv_nsec - start_time.tv_nsec;
-    time = (double)sec + (double)nsec * 1e-9;
+    struct timespec start_time, end_time;
+    long total = 0; // bytes received
+    int started = 0;
 
+    printf("Waiting for relay...\n");
+    int sock = accept(server_sock, NULL, NULL);
+    printf("Relay connected\n");
+
+    while ((n = read(sock, buf, BUF_LEN)) > 0) {
+        if (!started) {
+            clock_gettime(CLOCK_MONOTONIC, &start_time); // start at first data
+            started = 1;
+        }
+        write(fd, buf, n);
+        total += n;
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &end_time); // relay closed = done
+    printf("Relay disconnected\n");
+
+    double elapsed = (end_time.tv_sec  - start_time.tv_sec)
+                   + (end_time.tv_nsec - start_time.tv_nsec) * 1e-9;
+
+    close(sock);
     close(fd);
     close(server_sock);
 
-
-    //ファイルサイズ計測用コード
-    long fsize;
-    FILE *fp = fopen(filename, "rb");
-    fseek(fp, 0, SEEK_END);
-    fsize = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
-
-    printf("filesize : %ld / time : %f\n", fsize, time);
-    
-    fclose(fp);
-
+    printf("filesize : %ld / time : %f\n", total, elapsed);
     return 0;
 }
