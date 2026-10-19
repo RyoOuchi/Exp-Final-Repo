@@ -38,22 +38,6 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
-    //時間計測開始
-    clock_gettime(CLOCK_REALTIME, &start_time);
-
-    while (1) {
-        printf("Waiting for relay...\n");
-        int sock = accept(server_sock, NULL, NULL);
-        printf("Relay connected\n");
-
-        while ((n = read(sock, buf, BUF_LEN - 1)) > 0) {
-            write(fd, buf, n);
-        }
-
-        close(sock);
-        printf("Relay disconnected\n");
-    }
-
     struct timespec start_time, end_time;
     long total = 0; // bytes received
     int started = 0;
