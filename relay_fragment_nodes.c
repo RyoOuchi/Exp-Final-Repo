@@ -142,12 +142,6 @@ const char *get_next_ip(const char *current_ip, const char *sender_ip)
 int main(int argc, char *argv[])
 {
     srand((unsigned)time(NULL));
-    if (argc < 2)
-    {
-        printf("Usage: %s <destination_ip>\n", argv[0]);
-        return 1;
-    }
-
 
     int server_sock = socket(AF_INET, SOCK_STREAM, 0);
 
