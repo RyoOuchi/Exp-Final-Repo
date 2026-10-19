@@ -60,3 +60,27 @@ TCPではデータが分割されて届くことがあるため、表示が複�
 `client` と `relay` は通信終了後も次の接続を待ちます。終了するには `Ctrl+C` を押します。
 
 `client` と `relay` はどちらもポート `10000` で待ち受けるため、別々のマシンや仮想マシンで起動してください。同じネットワーク名前空間ではポートが競合します。
+
+## 経路選択とデータ分配の計算
+
+`best_route/route_optimizer.py` で、`Link` オブジェクトにまとめたビットレートとRTTから、使用経路とファイルの分配量を計算できます。測定値は同ファイルの `NETWORK_LINKS` に設定してあり、CSVの読み込みは不要です。
+
+初回の準備（このプロジェクトでは実施済み）:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install -r best_route/requirements.txt
+```
+
+実行:
+
+```sh
+.venv/bin/python best_route/route_optimizer.py
+```
+
+送信元・宛先・ファイルサイズはPythonファイル先頭の `SOURCE`、`DESTINATION`、`FILE_SIZE_BYTES` を編集します。
+測定値は `Link(送信元, 宛先, ビットレート[Mbit/s], RTT[ms])` で設定します。入力値が正しいことを前提にした簡単な実装です。
+
+DFSで候補経路を探し、共有リンクの容量を守る線形計画と二分探索で完了時間を求めます。
+結果の `Data` は経路ごとのbytes、`Share` はファイル全体に対する割合です。
+表示時間は一定の速度と1 RTTの遅延を仮定した推定値です。実際のファイル送信は行いません。
