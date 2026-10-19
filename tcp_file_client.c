@@ -1,8 +1,19 @@
 #include "icslab2_net.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
 #include <sys/wait.h>
+
+void recv_loop(int sock, int fd) {//for子
+    char buf[BUF_LEN];
+    int n;
+    while ((n = read(sock, buf, BUF_LEN)) > 0) {
+        write(fd, buf, n);
+    }
+    close(sock);
+    _exit(0);
+}
 
 int main(int argc, char *argv[]) {
     int server_sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -18,6 +29,9 @@ int main(int argc, char *argv[]) {
     char *filename = NULL;
     int fd = 1;
 
+    int n_relay = 0;
+    int n_child = 0;
+
     int yes = 1;
     setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR,
                &yes, sizeof(yes));
@@ -30,19 +44,17 @@ int main(int argc, char *argv[]) {
     bind(server_sock, (struct sockaddr *)&serverAddr, sizeof(serverAddr));
     listen(server_sock, 5);
 
-    char buf[BUF_LEN];
-    int n;
-
     //ファイルを開く
-    if(argc > 1){
+    if(argc == 3){
         filename = argv[1];
         fd = open(filename, O_CREAT | O_WRONLY | O_TRUNC, 0644);
         if(fd < 0) {
             perror("open");
             return 1;
         }
+        n_relay = (int)strtol(argv[2], NULL, 10);
     }else{
-        printf("Usage: %s [o_filename]\n", argv[0]);
+        printf("Usage: %s [o_filename] [n_relay]\n", argv[0]);
         return 0;
     }
 
@@ -74,53 +86,31 @@ int main(int argc, char *argv[]) {
     // ------------------------------------------
     // 子プロセスを作成して複数経路から受け取れるように
     // ------------------------------------------
-    pid_t pid;
-    pid = fork();
-    if(pid < 0) {
-        perror("fork");
-        return 1;
-    }
-    if(pid == 0) {
+
+    if(fork() == 0) {
         close(server_sock);
-        while ((n = read(connect_sock, buf, BUF_LEN)) > 0) {
-            ssize_t w = write(fd, buf, n);
-            if (w < 0) {
-                perror("write");
-                _exit(1);
-            }
-        }
-        close(connect_sock);
-        _exit(0);
+        recv_loop(connect_sock, fd);
     }
-    
-    // ------------------------------------------
-    // 親プロセスはconnect_sockを使わない
-    // ------------------------------------------
+
     close(connect_sock);
-    
-    printf("Waiting for relay...\n");
-    int sock = accept(server_sock, NULL, NULL);
-    if (sock < 0) {
-        perror("accept");
-        return 1;
-    }
-    printf("Relay connected\n");
+    n_child++;
 
-    while ((n = read(sock, buf, BUF_LEN)) > 0) {
-        ssize_t w = write(fd, buf, n);
-        if (w < 0) {
-            perror("write");
-            return 1;
+    printf("Waiting for %d relay(s) \n", n_relay);
+    for(int i = 0; i < n_relay; i++){
+        int sock = accept(server_sock, NULL, NULL);
+        printf("Relay %d connected\n", i);
+
+        if(fork() == 0){
+            close(server_sock);
+            recv_loop(sock, fd);
         }
+        close(sock);
+        n_child++;
     }
 
-    close(sock);
-    printf("Relay disconnected\n");
-
-    // ------------------------------------------
-    // 子プロセス（直通の受信）が終わるのを待つ
-    // ------------------------------------------
-    waitpid(pid, NULL, 0);
+    for(int i = 0; i < n_child; i++){ //全子プロセスが終わるのをここでまつ
+        wait(NULL);
+    }
 
     //時間計測終了
     clock_gettime(CLOCK_REALTIME, &end_time);
