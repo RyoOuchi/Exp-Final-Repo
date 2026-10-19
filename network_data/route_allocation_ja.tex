@@ -1,0 +1,373 @@
+% 日本語の説明文書。XeLaTeXを想定した、外部ファイル不要の単独ソースです。
+\documentclass[a4paper,11pt]{article}
+\usepackage[margin=23mm,top=22mm,bottom=22mm]{geometry}
+\usepackage{fontspec}
+\usepackage{xeCJK}
+\setCJKmainfont{HaranoAjiMincho-Regular.otf}[BoldFont=HaranoAjiMincho-Bold.otf]
+\setCJKsansfont{HaranoAjiGothic-Medium.otf}[BoldFont=HaranoAjiGothic-Bold.otf]
+\usepackage{amsmath,amssymb,booktabs,array}
+\usepackage{xcolor,tikz}
+\usepackage{enumitem}
+\usepackage[unicode,hidelinks]{hyperref}
+\hypersetup{pdftitle={RTTとビットレートによる経路選択とデータ分配},pdfauthor={}}
+\definecolor{routeblue}{HTML}{23628A}
+\definecolor{delaygray}{HTML}{DCE1E5}
+\renewcommand{\baselinestretch}{1.12}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\setlist{itemsep=3pt,topsep=4pt,leftmargin=2em}
+\renewcommand{\arraystretch}{1.28}
+\newcommand{\route}[1]{\ensuremath{#1}}
+\newcommand{\positive}[1]{\left[#1\right]_{+}}
+\newcommand{\bitunit}{\mathrm{bit/s}}
+\newcommand{\mbitunit}{\mathrm{Mbit/s}}
+\newcommand{\byteunit}{\mathrm{bytes}}
+\newcommand{\secunit}{\mathrm{s}}
+\newcommand{\MB}{\mathrm{MB}}
+\newcommand{\kB}{\mathrm{kB}}
+\pagestyle{plain}
+
+\begin{document}
+\begin{center}
+  {\LARGE\sffamily RTTとビットレートによる\\[4pt]経路選択とデータ分配}\par
+  \vspace{5pt}
+  {\large ファイル全体の転送完了時間を短くするための近似モデル}
+\end{center}
+
+\section{何を最小にするのか}
+
+目標は、\textbf{ファイルのすべての部分が受信側に届くまでの時間を最小にすること}である。
+1本の経路だけを使う場合は、ファイル全体の転送時間が最も短い経路を選ぶ。
+複数の経路を同時に使う場合は、経路ごとに送るデータ量を調整する。
+
+RTTが小さい経路は、要求に対する応答が早い。
+ビットレートが大きい経路は、連続して送れるデータ量が多い。
+そのため、\textbf{適切な経路と分配比率はファイルの大きさによって変わる}。
+
+\subsection{記号と単位}
+\begin{center}
+\begin{tabular}{@{}cll@{}}
+\toprule
+記号 & 意味 & 計算に使う単位 \\
+\midrule
+$S$ & ファイル全体の大きさ & bytes \\
+$B_i$ & 経路$i$のデータ転送速度 & bit/s \\
+$R_i$ & 経路$i$の往復時間（RTT） & s \\
+$x_i$ & 経路$i$に割り当てるデータ量 & bytes \\
+$w_i$ & 経路$i$に割り当てる割合（$x_i/S$） & 単位なし \\
+$T$ & ファイル全体の転送完了時間 & s \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+本書では$S>0$、$B_i>0$とする。単位は次のように統一する。
+\[
+  1\ \mathrm{Mbit/s}=10^6\ \mathrm{bit/s},\qquad
+  1\ \mathrm{ms}=10^{-3}\ \mathrm{s},\qquad
+  1\ \mathrm{MB}=10^6\ \mathrm{bytes}.
+\]
+
+\subsection{基本となる近似式}
+経路$i$で$x_i>0$ bytesを送るとき、転送完了時間を
+\begin{equation}
+  \boxed{T_i\approx R_i+\frac{8x_i}{B_i}}
+  \label{eq:base}
+\end{equation}
+と近似する。$8x_i$はデータ量をbytesからbitに換算した値である。
+\[
+  \underbrace{R_i}_{\text{通信開始時の固定遅延}}
+  +\underbrace{\frac{8x_i}{B_i}}_{\text{データを送り切るための時間}}
+\]
+
+\textbf{この式でのRTTの扱い：}
+接続済みの経路で要求と応答を1回行う状況を想定し、固定遅延を1 RTTと置いている。
+実際の通信方式によってこの項は変わる。TCP接続の確立、通信開始直後の速度の立ち上がり、
+パケット損失、他の通信との競合などは、この単純な式には含めない。
+また、RTTは1パケットを送るたびに必ず待つ時間を意味しない。
+
+\newpage
+\section{経路の評価と、1本だけ使う場合の選び方}
+
+各CSVの値が直接つながったリンクの測定値であり、中継ノードが受信したデータを順次転送すると仮定する。
+経路$i$上のリンク集合を$P_i$とすると、
+\begin{equation}
+  B_i=\min_{e\in P_i} B_e,\qquad
+  R_i\approx\sum_{e\in P_i}R_e
+  \label{eq:path}
+\end{equation}
+と評価する。転送速度は\textbf{最も遅いリンク}に制限される。
+RTTの和は、往路と復路が同じ経路を通り、各リンクの遅延を足し合わせられる場合の近似である。
+
+\subsection{node1からnode4までの3つの候補}
+\begin{center}
+\begin{tabular}{@{}clrr@{}}
+\toprule
+経路番号 & 経路 & $B_i$（Mbit/s） & $R_i$（ms） \\
+\midrule
+1 & \route{1\to4}       & 26.3 & 500 \\
+2 & \route{1\to2\to4} & 1.24 & 10.557 \\
+3 & \route{1\to5\to4} & 47.9 & 10.551 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+例えば経路3では、
+\begin{align*}
+ B_3&=\min(47.9,50.3)=47.9\ \mathrm{Mbit/s},\\
+ R_3&=0.059+10.492=10.551\ \mathrm{ms}
+      =0.010551\ \mathrm{s}.
+\end{align*}
+
+ファイル全体を1本の経路だけで送る場合は、各経路について
+\[
+  T_i(S)=R_i+\frac{8S}{B_i}
+\]
+を計算し、最小の値を持つ経路を選ぶ。式で書くと、
+\begin{equation}
+ \boxed{i^*=\operatorname*{arg\,min}_i
+  \left(R_i+\frac{8S}{B_i}\right)}
+\end{equation}
+である。$\operatorname*{arg\,min}$は「値を最小にする経路番号」を表す。
+
+\begin{center}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+経路 & 10 kBの転送時間 & 10 MBの転送時間 \\
+\midrule
+\route{1\to4}       & 約503 ms & 約3.54 s \\
+\route{1\to2\to4} & 約75 ms  & 約64.53 s \\
+\route{1\to5\to4} & 約12 ms  & 約1.68 s \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+経路1と経路2を比べると、10 kBではRTTの小さい経路2が速く、
+10 MBではビットレートの大きい経路1が速い。
+一方、この3候補の中では、どちらのファイルサイズでも経路3が最も速い。
+
+\textbf{注意：}各経路にファイル全体を送った場合の時間を比べる方法は、
+1本を選ぶための方法である。ファイルを分割して並列に送る場合は、次の分配問題を解く。
+
+\newpage
+\section{複数の独立した経路へデータを分配する}
+
+まず、経路同士がリンクの転送能力を奪い合わず、送受信ノードにも追加の速度制限がない場合を考える。
+ファイルを重複なく分割し、各経路で同時に転送を開始する。
+
+\subsection{全体の完了時間は、最も遅く到着する部分で決まる}
+割り当てるデータ量は、
+\begin{equation}
+ x_i\ge0,\qquad \sum_i x_i=S
+ \label{eq:sum}
+\end{equation}
+を満たす必要がある。全体を早く終えるための問題は、
+\begin{equation}
+ \boxed{
+  \min_{\substack{x_i\ge0\\\sum_i x_i=S}}
+  \ \max_{i:x_i>0}\left(R_i+\frac{8x_i}{B_i}\right)
+ }
+ \label{eq:minmax}
+\end{equation}
+となる。これは「使う経路のうち、最も遅い完了時間を、できるだけ小さくする」という意味である。
+データを割り当てない経路（$x_i=0$）は、最大値の計算から除く。
+
+\textbf{考え方：}
+ある経路だけが遅く終わるなら、その経路のデータを早く終わる経路へ少し移せばよい。
+この理想化したモデルでは、最適な分配にすると、\textbf{使用する経路の完了時間がそろう}。
+
+\subsection{完了時刻を先に決めると、送れる量が分かる}
+「時刻$T$までに届けたい」と考えると、式\eqref{eq:base}から、経路$i$で届けられる量は
+\begin{equation}
+ x_i(T)=\frac{B_i}{8}\positive{T-R_i},\qquad
+ \positive{z}:=\max(0,z)
+ \label{eq:capacity}
+\end{equation}
+となる。$T\le R_i$なら、その時刻までには寄与できないため0 bytesとする。
+
+全経路が届けられる量の合計を$S$に一致させれば、最短の完了時刻$T^*$が求まる。
+\begin{equation}
+ \boxed{\sum_i\frac{B_i}{8}\positive{T^*-R_i}=S}
+ \label{eq:root}
+\end{equation}
+
+その後、各経路へ送る量と分配比率を計算する。
+\begin{equation}
+ \boxed{x_i=\frac{B_i}{8}\positive{T^*-R_i}},\qquad
+ \boxed{w_i=\frac{x_i}{S}
+ =\frac{B_i\positive{T^*-R_i}}{8S}}
+ \label{eq:weights}
+\end{equation}
+
+比率は$0\le w_i\le1$、$\sum_i w_i=1$となる。
+\textbf{RTTが完了時刻以上になる経路は使わず、残りの経路にデータを分配する}。
+
+\newpage
+\section{10 MBを3つの候補経路で並列転送する例}
+
+ここでは$S=10{,}000{,}000$ bytesとする。
+この3経路はリンクを共有していないため、前節の独立経路のモデルを適用する。
+
+3経路をすべて使えると仮定すると、式\eqref{eq:root}の正の部分を外して、
+\begin{equation}
+ T^*=\frac{8S+\sum_i B_iR_i}{\sum_i B_i}
+ \label{eq:allactive}
+\end{equation}
+と計算できる。ここではbitをMbitへそろえて代入すると、
+\begin{align*}
+ T^*
+ &=\frac{80+26.3\times0.5
+       +1.24\times0.010557+47.9\times0.010551}
+       {26.3+1.24+47.9}\\
+ &\approx1.241629\ \mathrm{s}.
+\end{align*}
+これはすべての$R_i$より大きいので、3経路を使うという仮定を満たしている。
+
+\begin{center}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+経路 & 割り当て量（MB） & 分配比率 & 完了時間（s） \\
+\midrule
+\route{1\to4}       & 2.438105 & 24.38\% & 1.241629 \\
+\route{1\to2\to4} & 0.190816 & 1.91\%  & 1.241629 \\
+\route{1\to5\to4} & 7.371079 & 73.71\% & 1.241629 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tikzpicture}[x=7cm,y=0.8cm,font=\small]
+ \foreach \y/\lab/\delay in
+   {2/{1\to4}/0.5,1/{1\to2\to4}/0.010557,0/{1\to5\to4}/0.010551}{
+   \node[anchor=east] at (-0.04,\y+0.22) {$\lab$};
+   \fill[delaygray] (0,\y) rectangle (\delay,\y+0.44);
+   \fill[routeblue] (\delay,\y) rectangle (1.241629,\y+0.44);
+ }
+ \draw[->] (0,-0.3) -- (1.34,-0.3) node[right] {時刻（s）};
+ \foreach \t/\lab in {0/0,0.5/0.5,1.241629/1.242}{
+   \draw (\t,-0.26) -- (\t,-0.35);
+   \node[below] at (\t,-0.35) {$\lab$};
+ }
+ \draw[dashed,gray] (1.241629,-0.2) -- (1.241629,2.65);
+ \node[anchor=south] at (1.241629,2.65) {同時に完了};
+ \fill[delaygray] (0,-1.05) rectangle (0.06,-0.86);
+ \node[anchor=west] at (0.075,-0.955) {固定遅延};
+ \fill[routeblue] (0.56,-1.05) rectangle (0.62,-0.86);
+ \node[anchor=west] at (0.635,-0.955) {データ量に応じた時間};
+\end{tikzpicture}
+\end{center}
+{\small 図は式\eqref{eq:base}の時間の内訳であり、実際のパケットの送信開始時刻を表すものではない。}
+
+最速の1経路（\route{1\to5\to4}）だけを使う場合は約1.681秒だが、
+分配するとモデル上は約1.242秒となる。
+
+\subsection{小さいファイルでは、遅延の大きい経路を使わない}
+10 kBでは$T^*\approx0.012179$秒となり、分配比率は順に
+\[
+ (w_1,w_2,w_3)\approx(0,\ 0.025143,\ 0.974857)
+\]
+である。経路1のRTTは0.5秒なので、全体が終わるまでに寄与できず、割り当て量は0になる。
+この3候補では、ファイルが約3.006 MBを超えると、経路1にも正の量を割り当てる解になる。
+小さいファイルでの並列化の利点はわずかであり、実際の処理の追加時間で相殺される場合がある。
+
+\newpage
+\section{計算の手順：二分探索で完了時刻を求める}
+
+どの経路を使うかを先に決めなくても、式\eqref{eq:root}を解けばよい。
+\[
+  F(T):=\sum_i\frac{B_i}{8}\positive{T-R_i}
+\]
+と置く。$F(T)$は「時刻$T$までに全経路で届けられるデータ量」であり、
+$T$を大きくすると減ることはない。この性質を使って二分探索を行う。
+
+\begin{enumerate}
+ \item \textbf{入力を用意する。}\\
+ ファイルサイズ$S$と、候補経路ごとの$B_i$、$R_i$を用意し、単位をbit/s、s、bytesにそろえる。
+ \item \textbf{探索範囲を決める。}\\
+ 下限を$L=0$、上限を
+ \[
+   U=\min_i\left(R_i+\frac{8S}{B_i}\right)
+ \]
+ とする。$U$は最速の1経路だけでもファイルを送り切れる時間である。
+ \item \textbf{範囲の中央を試す。}\\
+ $M=(L+U)/2$として$F(M)$を計算する。
+ \begin{itemize}
+  \item $F(M)\ge S$なら、時刻$M$までに送れるので$U\leftarrow M$とする。
+  \item $F(M)<S$なら、時間が足りないので$L\leftarrow M$とする。
+ \end{itemize}
+ \item \textbf{必要な精度まで繰り返す。}\\
+ 例えば$U-L<10^{-6}$秒になるまで手順3を繰り返し、$T^*\approx U$とする。
+ この精度は計算上の収束条件であり、測定値が同じ精度を持つという意味ではない。
+ \item \textbf{割り当て量と重みを出す。}\\
+ $x_i=(B_i/8)\positive{T^*-R_i}$、$w_i=x_i/S$を計算する。
+ 実装では丸め誤差を調整し、整数bytesに丸めた後の合計が必ず$S$になるようにする。
+\end{enumerate}
+
+\subsection{計算結果を確かめる}
+\begin{itemize}
+ \item 割り当て量の合計がファイル全体に一致する：$\sum_i x_i=S$。
+ \item 分配比率の合計が1になる：$\sum_i w_i=1$。
+ \item 使用する各経路で$R_i+8x_i/B_i\approx T^*$になる。
+ \item $R_i\ge T^*$の経路にはデータを割り当てない。
+\end{itemize}
+
+候補経路数を$n$、探索回数を$K$とすると、計算量は$O(nK)$である。
+ファイルサイズを変えたときや、測定した転送速度・RTTが変わったときは、重みを再計算する。
+アップロードとダウンロードでは、CSVの対応する方向のビットレートを使う。
+
+\newpage
+\section{同じリンクを共有する経路がある場合}
+
+\route{1\to5\to4}と\route{1\to5\to2\to4}は、リンク\route{1\to5}を共有する。
+この2経路がそれぞれ独立に47.9 Mbit/sを使えると計算すると、同じリンクの能力を二重に数えてしまう。
+共有リンクの容量を守る必要があることは、実際のマルチパス通信でも重要である\cite{rfc6356}。
+
+\subsection{リンク容量の制約を加える}
+経路$i$に予約する一定の転送速度を$q_i$（bit/s）とする。
+各リンク$e$について、そこを通る経路の速度の合計をリンク容量$B_e$以下にする。
+\begin{equation}
+  \boxed{\sum_{i:e\in P_i}q_i\le B_e},\qquad q_i\ge0.
+  \label{eq:shared}
+\end{equation}
+
+試しの完了時刻$T$を固定し、次の線形計画問題を解く。
+\begin{equation}
+\begin{aligned}
+ \text{最大化}\quad &G(T)=\sum_i q_i\positive{T-R_i}\\
+ \text{制約}\quad &q_i\ge0,\\
+                 &\sum_{i:e\in P_i}q_i\le B_e
+                   \quad(\text{すべてのリンク }e).
+\end{aligned}
+\label{eq:lp}
+\end{equation}
+ここで$G(T)$の単位はbitである。$T$を固定すると$\positive{T-R_i}$は定数なので、
+目的関数も制約も$q_i$に関して線形になる。
+
+最大値が$8S$以上なら、その時刻までに送れると判定する。
+外側で$T$を二分探索し、内側で線形計画問題を解けば、
+\textbf{経路ごとに一定の速度を予約するモデル}での最短時間が求まる。
+その解から$x_i=q_i\positive{T-R_i}/8$を求める。
+数値誤差などで合計が$S$を超える場合は割り当て量を減らして調整する。
+
+\subsection{この近似で分かることと、実験で確認すること}
+\begin{itemize}
+ \item 分配量を連続量として扱い、途中のノードがデータを順次転送できると仮定している。
+ ファイル全体を受信してから中継する方式には、そのまま適用できない。
+ \item ビットレートは同時転送中も一定と仮定する。CPU、ディスク、送受信ノードの合計速度などが制限になるなら、追加の制約が必要である。
+ \item TCPの実測速度には測定時のRTTやウィンドウの影響が含まれる。
+ リンク容量と実測速度を区別し、TCPの影響を二重に差し引かない。
+ \item 求めた重みは近似モデル上の値である。実際には経路別に分割データを送り、受信側で元の順序に組み立て、完了時間を測って評価する。
+\end{itemize}
+
+\vspace{-5pt}
+\begin{thebibliography}{9}
+\small
+\bibitem{data}
+ 本実験の\texttt{network\_data/bitrate.csv}および\texttt{network\_data/rtt.csv}。
+ 数値例にはnode1からnode4への3候補を使用し、全候補経路での最適性は主張していない。
+\bibitem{rfc6356}
+ C. Raiciu, M. Handley, D. Wischik,
+ \emph{Coupled Congestion Control for Multipath Transport Protocols}, RFC 6356, 2011.
+ \url{https://www.rfc-editor.org/rfc/rfc6356.html}
+\end{thebibliography}
+
+\end{document}
