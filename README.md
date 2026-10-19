@@ -84,3 +84,10 @@ python3 -m venv .venv
 DFSで候補経路を探し、共有リンクの容量を守る線形計画と二分探索で完了時間を求めます。
 結果の `Data` は経路ごとのbytes、`Share` はファイル全体に対する割合です。
 表示時間は一定の速度と1 RTTの遅延を仮定した推定値です。実際のファイル送信は行いません。
+
+## データの生成方法
+```
+gcc create_file.c -o create_file.out
+create_file.out 10
+```
+これで10MBのファイル（test.bin）を作れるはず
