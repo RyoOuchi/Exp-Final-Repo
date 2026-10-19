@@ -42,9 +42,14 @@ struct path {
     double weight;
 };
 
+// Optimizer shares for node 3 -> node 1, with a 100,000,000-byte file.
+// Node 2 combines 61,491,293 + 1,634,119 bytes from its two onward routes.
+// Its relay chooses once per connection; these weights do not enforce that split.
 static const struct path paths[] = {
-    { NULL,          1.0 },
-    { "172.24.0.20", 1.0 },
+    { NULL,          0.01632592 }, // 3 -> 1 (existing direct connection)
+    { "172.24.0.20", 0.63125412 }, // 3 -> 2 -> 5 -> 1, or 3 -> 2 -> 1
+    { "172.27.0.40", 0.33609434 }, // 3 -> 4 -> 1
+    { "172.28.0.50", 0.01632562 }, // 3 -> 5 -> 1
 };
 #define NUM_PATHS ((int)(sizeof(paths) / sizeof(paths[0])))
 
