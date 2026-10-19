@@ -45,6 +45,6 @@
 #define SERVER_HOSTNAME     "localhost"
 #define SERVER_IP_ADDR_STR  "127.0.0.1"
 /* バッファ長 */
-#define BUF_LEN             1000
+#define BUF_LEN             65536
 
 #endif
